@@ -162,7 +162,7 @@
 
   <header class="hero">
     <div class="wrap">
-      <h1>Esta página viajó desde Git hasta Azure</h1>
+      <h1>Esta página viajó desde Git hasta Google Cloud</h1>
       <p class="lead">Nadie la subió a mano. Un cambio en un archivo pasó por revisión, validación y despliegue automático. Abajo está el recorrido y la arquitectura que lo hizo posible.</p>
       <!-- CAMBIE SOLO EL TEXTO DE LA SIGUIENTE LÍNEA: ponga «Versión 2» y su nombre -->
       <p class="version" id="version">Versión 1: desplegado desde Git con Terraform.</p>
@@ -188,11 +188,11 @@
     <section aria-labelledby="arquitectura">
       <div class="wrap">
         <h2 id="arquitectura">La arquitectura del laboratorio</h2>
-        <p class="sub">GitHub guarda el código y ejecuta los pipelines. Azure guarda el estado, la identidad y los dos entornos. Entre ambos no hay contraseñas: hay un token que dura minutos.</p>
+        <p class="sub">GitHub guarda el código y ejecuta los pipelines. Google Cloud guarda el estado, la identidad y los dos entornos. Entre ambos no hay contraseñas: hay un token que dura minutos.</p>
         <figure class="diagram">
           <svg viewBox="0 0 880 410" role="img" aria-labelledby="dg-t dg-d">
             <title id="dg-t">Arquitectura del laboratorio GitOps</title>
-            <desc id="dg-d">El repositorio de GitHub activa GitHub Actions. Actions pide un token OIDC, Microsoft Entra ID lo valida contra una credencial federada de la identidad administrada y entrega un token de acceso. Con ese token Terraform despliega en los grupos de recursos de dev y prod, y guarda su estado en el grupo de recursos de estado. Las cuentas de almacenamiento de dev y prod publican esta página.</desc>
+            <desc id="dg-d">El repositorio de GitHub activa GitHub Actions. Actions pide un token OIDC, Workload Identity Federation lo valida contra el proveedor de GitHub y deja que Actions use una cuenta de servicio sin claves. Con ese acceso Terraform despliega en los proyectos de dev y prod, y guarda su estado en el proyecto de estado. Los buckets de dev y prod publican esta página.</desc>
             <defs>
               <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
               <marker id="ah-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head-ok"/></marker>
@@ -215,37 +215,37 @@
             <path class="arrow" d="M125 148 L125 194" marker-end="url(#ah)"/>
             <text class="t-muted" x="135" y="176">dispara</text>
 
-            <!-- Entra ID -->
+            <!-- Workload Identity -->
             <rect class="panel" x="290" y="10" width="200" height="390" rx="12"/>
-            <text class="t-title" x="306" y="36">Microsoft Entra ID</text>
+            <text class="t-title" x="306" y="36">Workload Identity</text>
             <rect class="box" x="308" y="110" width="164" height="150" rx="8"/>
-            <text class="t-title" x="322" y="134">Identidad</text>
-            <text class="t-title" x="322" y="152">administrada</text>
-            <text class="t-muted" x="322" y="176">id-gitops-github</text>
-            <text class="t-muted" x="322" y="200">4 credenciales</text>
-            <text class="t-muted" x="322" y="218">federadas: PR, main,</text>
+            <text class="t-title" x="322" y="134">Cuenta de servicio</text>
+            <text class="t-title" x="322" y="152">sin claves</text>
+            <text class="t-muted" x="322" y="176">sa-gitops-github</text>
+            <text class="t-muted" x="322" y="200">4 contextos permitidos</text>
+            <text class="t-muted" x="322" y="218">(subject): PR, main,</text>
             <text class="t-muted" x="322" y="236">dev y prod</text>
             <path class="arrow" d="M222 240 L306 200" marker-end="url(#ah)"/>
             <text class="t-muted" x="232" y="290">1. token OIDC</text>
             <text class="t-muted" x="232" y="308">2. token de acceso</text>
 
-            <!-- Azure -->
+            <!-- Google Cloud -->
             <rect class="panel" x="540" y="10" width="330" height="390" rx="12"/>
-            <text class="t-title" x="556" y="36">Azure</text>
+            <text class="t-title" x="556" y="36">Google Cloud</text>
             <rect class="box-state" x="558" y="52" width="294" height="84" rx="8"/>
-            <text class="t-title" x="572" y="76">rg-gitops-state</text>
-            <text class="t-muted" x="572" y="96">Storage con el estado de Terraform</text>
-            <text class="t-muted" x="572" y="114">(contenedor tfstate, con bloqueo)</text>
+            <text class="t-title" x="572" y="76">proyecto gitops-state</text>
+            <text class="t-muted" x="572" y="96">Bucket con el estado de Terraform</text>
+            <text class="t-muted" x="572" y="114">(versionado y con bloqueo)</text>
             <rect class="box-dev" x="558" y="152" width="294" height="110" rx="8"/>
-            <text class="t-title" x="572" y="176">rg-gitops-dev</text>
+            <text class="t-title" x="572" y="176">proyecto gitops-dev</text>
             <rect class="site" x="572" y="190" width="266" height="58" rx="6"/>
-            <text x="586" y="212">Storage con sitio web estático</text>
-            <text class="t-muted" x="586" y="232">contenedor $web, index.html</text>
+            <text x="586" y="212">Bucket con sitio web estático</text>
+            <text class="t-muted" x="586" y="232">lectura pública, index.html</text>
             <rect class="box-prod" x="558" y="278" width="294" height="110" rx="8"/>
-            <text class="t-title" x="572" y="302">rg-gitops-prod</text>
+            <text class="t-title" x="572" y="302">proyecto gitops-prod</text>
             <rect class="site" x="572" y="316" width="266" height="58" rx="6"/>
-            <text x="586" y="338">Storage con sitio web estático</text>
-            <text class="t-muted" x="586" y="358">contenedor $web, index.html</text>
+            <text x="586" y="338">Bucket con sitio web estático</text>
+            <text class="t-muted" x="586" y="358">lectura pública, index.html</text>
 
             <!-- Terraform -->
             <path class="arrow-ok" d="M222 340 C 330 380, 440 372, 556 344" marker-end="url(#ah-ok)"/>
@@ -258,7 +258,7 @@
               <text class="pin-t" x="61" y="15" text-anchor="middle">usted está aquí</text>
             </g>
           </svg>
-          <figcaption>Los dos sitios, en dev y en prod, son cuentas de almacenamiento distintas que publican este mismo archivo.</figcaption>
+          <figcaption>Los dos sitios, en dev y en prod, son buckets distintos que publican este mismo archivo.</figcaption>
         </figure>
       </div>
     </section>
@@ -268,9 +268,9 @@
         <h2 id="ideas">Cuatro ideas que sostienen el laboratorio</h2>
         <p class="sub">Si entiende estas cuatro, entiende por qué el flujo es seguro y repetible.</p>
         <dl class="ideas">
-          <div><dt>Sin secretos</dt><dd>GitHub entrega un token de pocos minutos. Azure lo acepta solo si el repositorio, la rama o el entorno coinciden con una credencial federada.</dd></div>
-          <div><dt>Estado compartido</dt><dd>Terraform anota lo que creó en un contenedor de Azure Storage, con bloqueo y versiones. Así dos ejecuciones nunca se pisan.</dd></div>
-          <div><dt>Aprobación humana</dt><dd>El entorno <code>prod</code> espera. Hasta que alguien aprueba, el job ni siquiera recibe un token para tocar Azure.</dd></div>
+          <div><dt>Sin secretos</dt><dd>GitHub entrega un token de pocos minutos. Google Cloud lo acepta solo si el repositorio, la rama o el entorno coinciden con lo configurado en Workload Identity Federation.</dd></div>
+          <div><dt>Estado compartido</dt><dd>Terraform anota lo que creó en un bucket de Cloud Storage, con bloqueo y versiones. Así dos ejecuciones nunca se pisan.</dd></div>
+          <div><dt>Aprobación humana</dt><dd>El entorno <code>prod</code> espera. Hasta que alguien aprueba, el job ni siquiera recibe un token para tocar Google Cloud.</dd></div>
           <div><dt>Detección de deriva</dt><dd>Si alguien cambia algo en el portal, un plan programado lo detecta y abre un issue con la diferencia.</dd></div>
         </dl>
       </div>
@@ -279,13 +279,13 @@
     <section aria-labelledby="direccion">
       <div class="wrap">
         <h2 id="direccion">Qué hay detrás de esta dirección</h2>
-        <p class="sub">Un sitio estático en Azure no necesita servidor: un archivo HTML en un contenedor especial.</p>
+        <p class="sub">Un sitio estático en Google Cloud no necesita servidor: un archivo HTML en un bucket de Cloud Storage.</p>
         <table>
-          <tr><th scope="row">Servicio</th><td>Azure Storage con sitio web estático</td></tr>
-          <tr><th scope="row">Contenedor</th><td><code>$web</code>, de lectura pública solo para el sitio</td></tr>
+          <tr><th scope="row">Servicio</th><td>Cloud Storage con sitio web estático</td></tr>
+          <tr><th scope="row">Bucket</th><td>De lectura pública (<code>allUsers</code>) solo para el sitio</td></tr>
           <tr><th scope="row">Archivo</th><td><code>index.html</code>, subido por Terraform</td></tr>
-          <tr><th scope="row">Seguridad</th><td>Solo HTTPS, TLS 1.2 como mínimo, sin acceso anónimo a otros contenedores</td></tr>
-          <tr><th scope="row">Redundancia</th><td>Local (LRS): tres copias dentro de un mismo centro de datos</td></tr>
+          <tr><th scope="row">Seguridad</th><td>Solo HTTPS, acceso uniforme por IAM, sin claves de larga duración</td></tr>
+          <tr><th scope="row">Redundancia</th><td>Regional (us-central1): copias en varias zonas de una misma región</td></tr>
         </table>
       </div>
     </section>

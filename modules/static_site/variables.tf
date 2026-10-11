@@ -1,15 +1,15 @@
-variable "resource_group_name" {
+variable "project_id" {
   type        = string
-  description = "Grupo de recursos que ya existe (lo crea el bootstrap)."
+  description = "Proyecto que ya existe (lo crea el bootstrap)."
 }
 
-variable "location" {
+variable "region" {
   type = string
 }
 
 variable "prefix" {
   type        = string
-  description = "Prefijo corto para el nombre de la cuenta de almacenamiento."
+  description = "Prefijo corto para el nombre del bucket."
 
   validation {
     condition     = can(regex("^[a-z0-9]{3,8}$", var.prefix))
@@ -31,12 +31,12 @@ variable "index_file" {
   description = "Ruta del archivo index.html que se publica."
 }
 
-variable "tags" {
+variable "labels" {
   type = map(string)
 
   validation {
     condition = alltrue([
-      for k in ["owner", "environment", "course"] : can(var.tags[k])
+      for k in ["owner", "environment", "course"] : can(var.labels[k])
     ])
     error_message = "Etiquetas obligatorias: owner, environment y course."
   }

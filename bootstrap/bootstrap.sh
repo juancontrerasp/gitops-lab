@@ -1,91 +1,93 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---- Cambie solo estas dos líneas (respete mayúsculas y minúsculas) ----
+# ---- Change only these three lines (respect upper/lowercase) ----
 GH_USER="su-usuario-github"
 GH_REPO="gitops-lab"
-# -------------------------------------------------------------------------
+BILLING_ACCOUNT="XXXXXX-XXXXXX-XXXXXX"   # gcloud billing accounts list
+# -----------------------------------------------------------------
 
-LOC="eastus2"
-RG_STATE="rg-gitops-state"
-RG_DEV="rg-gitops-dev"
-RG_PROD="rg-gitops-prod"
-SA="stgitops$(openssl rand -hex 4)"
-IDN="id-gitops-github"
-SUB_ID=$(az account show --query id -o tsv)
-TENANT_ID=$(az account show --query tenantId -o tsv)
+REGION="us-central1"
+SUFFIX="$(openssl rand -hex 3)"
+P_STATE="gitops-state-${SUFFIX}"
+P_DEV="gitops-dev-${SUFFIX}"
+P_PROD="gitops-prod-${SUFFIX}"
+BUCKET="tfstate-${P_STATE}"
+SA_NAME="sa-gitops-github"
+SA_EMAIL="${SA_NAME}@${P_STATE}.iam.gserviceaccount.com"
+POOL="github-pool"
+PROVIDER="github-provider"
 
-echo "1/5 Grupos de recursos"
-for rg in "$RG_STATE" "$RG_DEV" "$RG_PROD"; do
-  az group create --name "$rg" --location "$LOC" --output none
+echo "1/6 Projects (the GCP equivalent of Azure resource groups)"
+for p in "$P_STATE" "$P_DEV" "$P_PROD"; do
+  gcloud projects create "$p" --name="$p" --quiet
+  gcloud billing projects link "$p" --billing-account="$BILLING_ACCOUNT" --quiet
 done
 
-echo "2/5 Almacenamiento del estado de Terraform"
-az storage account create --resource-group "$RG_STATE" --name "$SA" \
-  --location "$LOC" --sku Standard_LRS --kind StorageV2 \
-  --min-tls-version TLS1_2 --allow-blob-public-access false \
-  --allow-shared-key-access false --output none
-az storage account blob-service-properties update \
-  --resource-group "$RG_STATE" --account-name "$SA" \
-  --enable-versioning true --output none
-az storage container-rm create --resource-group "$RG_STATE" \
-  --storage-account "$SA" --name tfstate --output none
+echo "2/6 APIs"
+gcloud services enable storage.googleapis.com iam.googleapis.com \
+  iamcredentials.googleapis.com sts.googleapis.com \
+  cloudresourcemanager.googleapis.com --project="$P_STATE"
+for p in "$P_DEV" "$P_PROD"; do
+  gcloud services enable storage.googleapis.com \
+    cloudresourcemanager.googleapis.com --project="$p"
+done
 
-echo "3/5 Identidad administrada"
-az identity create --resource-group "$RG_STATE" --name "$IDN" \
-  --location "$LOC" --output none
-CLIENT_ID=$(az identity show -g "$RG_STATE" -n "$IDN" --query clientId -o tsv)
-PRINCIPAL_ID=$(az identity show -g "$RG_STATE" -n "$IDN" \
-  --query principalId -o tsv)
+echo "3/6 Terraform state bucket (versioned, no public access)"
+gcloud storage buckets create "gs://${BUCKET}" --project="$P_STATE" \
+  --location="$REGION" --uniform-bucket-level-access \
+  --public-access-prevention
+gcloud storage buckets update "gs://${BUCKET}" --versioning
 
-echo "4/5 Credenciales federadas para GitHub"
-# GitHub ahora emite el subject con identificadores numéricos
-# (repo:USUARIO@ID/REPO@ID:...). Los leemos de la API pública para que la
-# credencial coincida exactamente, con las mayúsculas correctas.
+echo "4/6 Service account (no keys are ever created)"
+gcloud iam service-accounts create "$SA_NAME" --project="$P_STATE" \
+  --display-name="GitHub Actions GitOps"
+
+echo "5/6 Workload Identity Federation for GitHub"
 GH_JSON=$(curl -fsS "https://api.github.com/repos/${GH_USER}/${GH_REPO}") || {
-  echo "No encontré github.com/${GH_USER}/${GH_REPO}. Cree primero el repositorio (público) y revise GH_USER y GH_REPO."
+  echo "Repo github.com/${GH_USER}/${GH_REPO} not found. Create it first (public)."
   exit 1
 }
 OWNER=$(echo "$GH_JSON" | jq -r .owner.login); OWNER_ID=$(echo "$GH_JSON" | jq -r .owner.id)
 REPO=$(echo "$GH_JSON" | jq -r .name);         REPO_ID=$(echo "$GH_JSON" | jq -r .id)
-# Se registran los dos formatos (con y sin identificadores) por compatibilidad.
-declare -A PREFIX=(
-  [id]="repo:${OWNER}@${OWNER_ID}/${REPO}@${REPO_ID}"
-  [nombre]="repo:${OWNER}/${REPO}"
-)
-declare -A CONTEXT=(
-  [pull-request]="pull_request"
-  [rama-main]="ref:refs/heads/main"
-  [entorno-dev]="environment:dev"
-  [entorno-prod]="environment:prod"
-)
-for p in "${!PREFIX[@]}"; do
-  for c in "${!CONTEXT[@]}"; do
-    az identity federated-credential create --resource-group "$RG_STATE" \
-      --identity-name "$IDN" --name "gh-${p}-${c}" \
-      --issuer "https://token.actions.githubusercontent.com" \
-      --subject "${PREFIX[$p]}:${CONTEXT[$c]}" \
-      --audiences "api://AzureADTokenExchange" --output none
-  done
+
+gcloud iam workload-identity-pools create "$POOL" --project="$P_STATE" \
+  --location=global --display-name="GitHub"
+
+# The attribute condition is the "lock": only THIS repo (by immutable numeric
+# ID) can use the provider. Forks and renamed/recreated repos do not match.
+gcloud iam workload-identity-pools providers create-oidc "$PROVIDER" \
+  --project="$P_STATE" --location=global --workload-identity-pool="$POOL" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_id=assertion.repository_id,attribute.repository_owner_id=assertion.repository_owner_id" \
+  --attribute-condition="assertion.repository_id=='${REPO_ID}' && assertion.repository_owner_id=='${OWNER_ID}'"
+
+POOL_NAME=$(gcloud iam workload-identity-pools describe "$POOL" \
+  --project="$P_STATE" --location=global --format='value(name)')
+
+# One binding per subject (the same four as the Azure lab).
+for ctx in "pull_request" "ref:refs/heads/main" "environment:dev" "environment:prod"; do
+  gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
+    --project="$P_STATE" --role="roles/iam.workloadIdentityUser" \
+    --member="principal://iam.googleapis.com/${POOL_NAME}/subject/repo:${OWNER}/${REPO}:${ctx}" \
+    --condition=None --quiet >/dev/null
 done
 
-echo "5/5 Permisos mínimos"
-for rg in "$RG_DEV" "$RG_PROD"; do
-  az role assignment create --assignee-object-id "$PRINCIPAL_ID" \
-    --assignee-principal-type ServicePrincipal --role "Contributor" \
-    --scope "$(az group show --name "$rg" --query id -o tsv)" --output none
+echo "6/6 Least-privilege roles"
+for p in "$P_DEV" "$P_PROD"; do
+  gcloud projects add-iam-policy-binding "$p" \
+    --member="serviceAccount:${SA_EMAIL}" --role="roles/storage.admin" \
+    --condition=None --quiet >/dev/null
 done
-SA_ID=$(az storage account show -g "$RG_STATE" -n "$SA" --query id -o tsv)
-az role assignment create --assignee-object-id "$PRINCIPAL_ID" \
-  --assignee-principal-type ServicePrincipal \
-  --role "Storage Blob Data Contributor" \
-  --scope "$SA_ID/blobServices/default/containers/tfstate" --output none
+gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+  --member="serviceAccount:${SA_EMAIL}" --role="roles/storage.objectAdmin" >/dev/null
 
 echo
-echo "Cree estas cinco variables en GitHub (Settings > Secrets and variables"
-echo "> Actions > Variables):"
-echo "  AZURE_CLIENT_ID       = $CLIENT_ID"
-echo "  AZURE_TENANT_ID       = $TENANT_ID"
-echo "  AZURE_SUBSCRIPTION_ID = $SUB_ID"
-echo "  AZURE_LOCATION        = $LOC"
-echo "  TFSTATE_SA            = $SA"
+echo "Create these 7 variables in GitHub (Settings > Secrets and variables > Actions > Variables):"
+echo "  GCP_WIF_PROVIDER    = ${POOL_NAME}/providers/${PROVIDER}"
+echo "  GCP_SERVICE_ACCOUNT = ${SA_EMAIL}"
+echo "  GCP_PROJECT_DEV     = ${P_DEV}"
+echo "  GCP_PROJECT_PROD    = ${P_PROD}"
+echo "  GCP_REGION          = ${REGION}"
+echo "  TFSTATE_BUCKET      = ${BUCKET}"
+echo "  GCP_PROJECT_STATE   = ${P_STATE}   (only needed for cleanup)"
