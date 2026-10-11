@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # ---- Change only these three lines (respect upper/lowercase) ----
-GH_USER="su-usuario-github"
+GH_USER="juancontrerasp"
 GH_REPO="gitops-lab"
-BILLING_ACCOUNT="XXXXXX-XXXXXX-XXXXXX"   # gcloud billing accounts list
+BILLING_ACCOUNT="010C11-6B9F30-7DAF9B"   # gcloud billing accounts list
 # -----------------------------------------------------------------
 
 REGION="us-central1"
