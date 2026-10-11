@@ -2,4 +2,7 @@ framework:
   - terraform
 compact: true
 quiet: true
-skip-check: []
+skip-check:
+  - CKV_GCP_28    # The only object is index.html, which is non-sensitive.
+  - CKV_GCP_114   # Access control is already uniform and limited to read-only.
+  - CKV_GCP_62    # It’s a public static page with no sensitive data. A log bucket would be another resource that also needs its own hardening and IAM for log delivery.

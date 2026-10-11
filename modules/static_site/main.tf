@@ -20,6 +20,10 @@ resource "google_storage_bucket" "site" {
   website {
     main_page_suffix = "index.html"
   }
+  versioning {
+    enabled = true
+  }
+
 }
 
 # Un sitio estático en Cloud Storage debe ser legible por cualquiera.
